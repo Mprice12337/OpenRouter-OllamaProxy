@@ -17,11 +17,16 @@ LABEL org.opencontainers.image.source="https://github.com/marknefedov/ollama-ope
 # Copy SSL certificates from the builder stage for HTTPS connections
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
-# Create a non-root user for better security
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# Set environment variables for permissions
+ENV UMASK=000
+ENV PUID=99
+ENV PGID=100
+
+RUN apk add --no-cache su-exec
 
 # Create app directory for the binary and default config
-RUN mkdir -p /app
+RUN mkdir -p /app /config
+
 COPY --from=builder /app/ollama-proxy /app/ollama-proxy
 COPY models-filter /app/models-filter.default
 COPY entrypoint.sh /app/entrypoint.sh
@@ -29,23 +34,14 @@ COPY entrypoint.sh /app/entrypoint.sh
 # Make entrypoint executable
 RUN chmod +x /app/entrypoint.sh
 
-# Create config directory which will be used as a volume mount point
-# and set ownership to the non-root user
-RUN mkdir -p /config && chown -R appuser:appgroup /config /app
-
-# Switch to the non-root user
-USER appuser
-
-# Set working directory to the config directory.
-# The Go app reads 'models-filter' from its working directory.
+# Set working directory to the config directory
 WORKDIR /config
 
 # Expose the application port
 EXPOSE 11434
 
-# Define a volume for the configuration.
-# This allows users to mount a host directory to persist the models-filter file.
+# Define a volume for the configuration
 VOLUME /config
 
-# Set the entrypoint to the shell script
+# Run entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
